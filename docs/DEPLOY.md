@@ -1,8 +1,11 @@
 # Deploying Aureon
 
-Aureon is one Python web service (FastAPI) that also serves the website. It needs no database server:
-on start-up it creates a SQLite file and loads the real MCX data bundled in `data/seed/`
-(2 Jan 2019 – 23 Oct 2026, ~3 seconds). No API keys are required.
+Aureon is one Python web service (FastAPI) that also serves the website. It needs no database server
+and no API keys. The Docker build runs `python run.py prebuild`, which builds the SQLite database from
+the real MCX data in `data/seed/` (2 Jan 2019 – 23 Oct 2026) **and** precomputes the answer to every
+read-only page request. The running site just serves those prebuilt answers, so pages load instantly
+even on a tiny free instance. Anything you customise (tests, opportunity checks, other dates) is still
+computed live.
 
 Deployed copies run in **read-only mode** (`AUREON_READ_ONLY=true`): visitors can explore, compare and
 run tests, but can't upload or collect data. To add data, collect it on your own computer, then
@@ -21,11 +24,13 @@ Notes for the free plan:
 * The service sleeps after 15 minutes without visitors; the next visit takes ~30–60 seconds to wake it.
 * The free CPU is slow: the **realistic test** can take 1–3 minutes (10–20 s on a laptop). Quick tests,
   comparisons and opportunity checks stay fast. A paid "Starter" instance removes both limits.
-* The disk is temporary. That's fine: the data is reloaded from `data/seed/` on every start. Test
-  results are kept in memory and disappear on restart, as they do locally.
+* The disk is temporary. That's fine: the database and page answers are baked into the image at
+  build time. Test results are kept in memory and disappear on restart, as they do locally.
+* **Health check path must be `/api/health`** (Settings → Health Check Path). It always answers
+  instantly; a slow page can never make Render think the service is down.
 
 Prefer not to use the Blueprint? **New → Web Service → your repo**, choose **Docker** as the runtime,
-set the environment variable `AUREON_READ_ONLY=true`, and set the health-check path to `/api/status`.
+set the environment variable `AUREON_READ_ONLY=true`, and set the health-check path to `/api/health`.
 
 ## Option 2 — any Docker host (Railway, Fly.io, Google Cloud Run, a VPS)
 
@@ -65,7 +70,7 @@ if you want to keep loading data through the Data sources page.
 
 1. On your computer, collect new days (Data sources → option 1), and import them as usual.
 2. Copy the new collector file into `data/seed/`.
-3. Commit and push. Render rebuilds and loads the extra file on start.
+3. Commit and push. Render rebuilds the image, and the prebuild step includes the new data.
 
 ## A note on the data
 
