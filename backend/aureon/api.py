@@ -15,7 +15,7 @@ from .backtest.costs import CostModel
 from .backtest.engine import BacktestConfig
 from .backtest.walkforward import WalkForwardConfig
 from .config import ROOT, get_settings
-from .data.pipeline import collect_tinyfish, ingest_import_dir, ingest_text
+from .data.pipeline import collect_tinyfish, ingest_import_dir, ingest_text, seed_if_empty
 from .jsonify import to_jsonable
 from .logging_setup import configure_logging
 from .service import Service, build_dataclass
@@ -65,7 +65,13 @@ def create_app(service: Service | None = None) -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
     svc = service or Service(settings)
+    if service is None:
+        seed_if_empty(svc.store, settings)
     app = FastAPI(title="Aureon", version="1.0.0")
+
+    def _writable() -> None:
+        if settings.read_only:
+            raise HTTPException(403, "This Aureon deployment is read-only: data can't be uploaded or collected here.")
     app.state.service = svc
 
     @app.middleware("http")
@@ -84,7 +90,7 @@ def create_app(service: Service | None = None) -> FastAPI:
     # ---------------------------------------------------------------- reference & status
     @app.get("/api/status")
     def status():
-        return J(svc.status())
+        return J({**svc.status(), "read_only": settings.read_only})
 
     @app.get("/api/specs")
     def specs():
@@ -160,6 +166,7 @@ def create_app(service: Service | None = None) -> FastAPI:
     # ---------------------------------------------------------------- data ingestion
     @app.post("/api/ingest/upload")
     async def upload(file: UploadFile = File(...)):
+        _writable()
         data = await file.read()
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(413, "file too large")
@@ -175,6 +182,7 @@ def create_app(service: Service | None = None) -> FastAPI:
 
     @app.post("/api/ingest/scan")
     def scan():
+        _writable()
         return J({"results": ingest_import_dir(svc.store, settings)})
 
     @app.get("/api/ingest/runs")
@@ -190,6 +198,7 @@ def create_app(service: Service | None = None) -> FastAPI:
 
     @app.post("/api/collect/tinyfish")
     def collect(body: dict = Body(default={})):
+        _writable()
         if not settings.tinyfish_api_key:
             raise HTTPException(400, "TINYFISH_API_KEY is not configured — add it to .env and restart.")
         if svc.collection_status.get("running"):

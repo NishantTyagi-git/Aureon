@@ -22,6 +22,9 @@ copy .env.example .env      # then add TINYFISH_API_KEY if you want automated co
 .venv\Scripts\python run.py # → http://127.0.0.1:8000
 ```
 
+A fresh install loads the bundled MCX data in `data/seed/` (2019–2026) automatically on first start.
+To put Aureon online, see **[docs/DEPLOY.md](docs/DEPLOY.md)** (Render in a few clicks, or any Docker host).
+
 Tests:
 
 ```bash

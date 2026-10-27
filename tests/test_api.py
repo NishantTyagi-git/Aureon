@@ -63,3 +63,27 @@ def test_full_research_flow_on_synthetic_store(tmp_settings, synthetic_store):
                                                           "lookbacks": [20, 40], "entry_zs": [2.0]}}).json()
     assert "folds" in wf
     assert c.get("/api/results/latest").json()["backtest"] is not None
+
+
+def test_seed_loads_into_empty_database_once(tmp_settings, store):
+    from aureon.data.pipeline import seed_if_empty
+    tmp_settings.seed_dir = tmp_settings.data_dir / "seed"
+    tmp_settings.seed_dir.mkdir()
+    (tmp_settings.seed_dir / "s.json").write_text(json.dumps(MCX_SAMPLE), encoding="utf-8")
+    first = seed_if_empty(store, tmp_settings)
+    assert first and first[0]["inserted"] == 5
+    assert seed_if_empty(store, tmp_settings) == []  # already populated: skipped
+    assert (tmp_settings.seed_dir / "s.json").exists()  # seed files are never moved
+
+
+def test_read_only_blocks_writes(tmp_settings, store, monkeypatch):
+    from aureon import api as api_mod
+    tmp_settings.read_only = True
+    monkeypatch.setattr(api_mod, "get_settings", lambda: tmp_settings)
+    c = TestClient(api_mod.create_app(Service(tmp_settings, store)))
+    assert c.get("/api/status").json()["read_only"] is True
+    r = c.post("/api/ingest/upload", files={"file": ("d.json", io.BytesIO(b"{}"), "application/json")})
+    assert r.status_code == 403
+    assert c.post("/api/ingest/scan").status_code == 403
+    assert c.post("/api/collect/tinyfish", json={"start": "2026-01-01"}).status_code == 403
+    assert c.get("/api/overview").status_code == 200  # reading still works

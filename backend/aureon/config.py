@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     host: str = "127.0.0.1"
     port: int = 8000
+    # Public deployments: block uploads / imports / collection so visitors can't change the data.
+    read_only: bool = False
+    # Real MCX data shipped with the code; loaded automatically into an empty database on start.
+    seed_dir: Path = ROOT / "data" / "seed"
 
     # TinyFish web-agent API. The key is read from TINYFISH_API_KEY (no AUREON_ prefix) as well.
     tinyfish_api_key: str | None = None
@@ -43,6 +47,9 @@ def get_settings() -> Settings:
     import os
 
     s = Settings()
+    # Hosting platforms (Render, Railway, Fly, Heroku…) pass the port to listen on as PORT.
+    if os.environ.get("PORT") and not os.environ.get("AUREON_PORT"):
+        s.port = int(os.environ["PORT"])
     if not s.tinyfish_api_key and os.environ.get("TINYFISH_API_KEY"):
         s.tinyfish_api_key = os.environ["TINYFISH_API_KEY"]
     if not s.tinyfish_api_key:

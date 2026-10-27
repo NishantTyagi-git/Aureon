@@ -1,0 +1,12 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# New → Blueprint → pick this repository → Apply.
+services:
+  - type: web
+    name: aureon
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/status
+    autoDeploy: true
+    envVars:
+      - key: AUREON_READ_ONLY
+        value: "true"

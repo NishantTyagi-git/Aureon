@@ -54,6 +54,24 @@ def ingest_text(store: Store, settings: Settings, text: str, source: str, reques
     return result
 
 
+def seed_if_empty(store: Store, settings: Settings) -> list[dict]:
+    """Load the bundled seed data (data/seed) when the database has no quotes yet. Seed files stay in
+    place; re-seeding an already-populated database is skipped."""
+    if store.counts()["quotes"] or not settings.seed_dir.exists():
+        return []
+    results = []
+    for path in sorted(settings.seed_dir.glob("*")):
+        if path.suffix.lower() not in (".json", ".csv") or not path.is_file():
+            continue
+        run_id = store.start_run("seed", {"file": path.name})
+        res = ingest_text(store, settings, path.read_text(encoding="utf-8-sig"), source="seed",
+                          request={"file": path.name}, filename=path.name)
+        store.finish_run(run_id, "error" if "error" in res else "ok", res)
+        results.append({"file": path.name, **res})
+        log.info("seeded %s: %s new rows", path.name, res.get("inserted"))
+    return results
+
+
 def ingest_import_dir(store: Store, settings: Settings) -> list[dict]:
     """Ingest every *.json / *.csv dropped into data/import, then move it to data/import/processed."""
     processed = settings.import_dir / "processed"

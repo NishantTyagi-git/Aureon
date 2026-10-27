@@ -64,6 +64,10 @@ export default async function data(root, _params, app) {
     return st;
   }
   const st = await refresh();
+  if (st.read_only) {
+    root.querySelector(".grid.g-3").outerHTML = `<div class="alert section"><span class="dot"></span><div><b>This is a read-only deployment.</b> It ships with official MCX data from ${date(st.first_date)} to ${date(st.last_date)}. Loading new data is disabled here; run Aureon on your own computer to collect or upload more.</div></div>`;
+    return;
+  }
   const today = new Date().toISOString().slice(0, 10);
   root.querySelector("#tf-s").value = st.last_date || today; root.querySelector("#tf-e").value = today;
 

@@ -1,0 +1,10 @@
+.git
+.venv
+.pytest_cache
+.claude
+**/__pycache__
+*.pyc
+.env
+data/aureon.db*
+data/raw
+data/import
