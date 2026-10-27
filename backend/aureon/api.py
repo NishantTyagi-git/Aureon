@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .analytics.relative_value import PairConfig
@@ -67,7 +67,20 @@ def create_app(service: Service | None = None) -> FastAPI:
     svc = service or Service(settings)
     if service is None:
         seed_if_empty(svc.store, settings)
+    # Read-only deployments serve ready-made answers for page loads (see aureon/prebuild.py).
+    from .prebuild import load_prebuilt, request_key
+    prebuilt = load_prebuilt(settings, svc.store) if settings.read_only else {}
+    if prebuilt:
+        log.info("serving %d prebuilt responses", len(prebuilt))
     app = FastAPI(title="Aureon", version="1.0.0")
+
+    @app.middleware("http")
+    async def _serve_prebuilt(request, call_next):
+        if prebuilt and request.method == "GET":
+            hit = prebuilt.get(request_key(request.url.path, request.url.query))
+            if hit is not None:
+                return Response(hit.read_bytes(), media_type="application/json")
+        return await call_next(request)
 
     def _writable() -> None:
         if settings.read_only:
@@ -88,6 +101,11 @@ def create_app(service: Service | None = None) -> FastAPI:
         return JSONResponse({"detail": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
     # ---------------------------------------------------------------- reference & status
+    @app.get("/api/health")
+    async def health():
+        # Liveness for hosting platforms: answered on the event loop, independent of any analytics.
+        return {"ok": True}
+
     @app.get("/api/status")
     def status():
         return J({**svc.status(), "read_only": settings.read_only})

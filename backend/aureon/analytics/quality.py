@@ -86,17 +86,18 @@ def suspicious_moves(panel: pd.DataFrame, k: float = 6.0, floor: float = 0.04) -
 def cross_product_outliers(panel: pd.DataFrame, threshold_bps: float = 150.0, min_dte: int = 3) -> pd.DataFrame:
     p = panel[panel["traded"] & (panel["dte"] >= min_dte) & panel["symbol"].isin(RESEARCH_SYMBOLS)]
     front = p.sort_values(["trade_date", "expiry"]).groupby(["trade_date", "symbol"]).head(1)
-    rows = []
-    for d, g in front.groupby("trade_date"):
-        if len(g) < 3:
-            continue
-        for _, r in g.iterrows():
-            others = g[g["symbol"] != r["symbol"]]["norm"]
-            dev = 1e4 * np.log(r["norm"] / others.median())
-            if abs(dev) > threshold_bps:
-                rows.append({"trade_date": d, "symbol": r["symbol"], "expiry": r["expiry"],
-                             "deviation_bps": float(dev), "norm": float(r["norm"])})
-    return pd.DataFrame(rows)
+    cols = ["trade_date", "symbol", "expiry", "deviation_bps", "norm"]
+    if front.empty:
+        return pd.DataFrame(columns=cols)
+    # One column per product; each product is compared with the median of the *other* products that day.
+    wide = front.pivot(index="trade_date", columns="symbol", values="norm")
+    wide = wide[wide.notna().sum(axis=1) >= 3]
+    dev = pd.DataFrame({s: 1e4 * np.log(wide[s] / wide.drop(columns=s).median(axis=1)) for s in wide.columns})
+    dev.index.name, dev.columns.name = "trade_date", "symbol"
+    long = dev.stack().rename("deviation_bps").reset_index()
+    long = long[long["deviation_bps"].abs() > threshold_bps]
+    out = long.merge(front[["trade_date", "symbol", "expiry", "norm"]], on=["trade_date", "symbol"])
+    return out.sort_values(["trade_date", "symbol"])[cols].reset_index(drop=True)
 
 
 def tick_conformity(panel: pd.DataFrame) -> list[dict]:

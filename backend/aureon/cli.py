@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     cc.add_argument("--start", required=True)
     cc.add_argument("--end", required=True)
     sub.add_parser("status")
+    sub.add_parser("prebuild", help="build the database and ready-made page answers for deployment")
     args = ap.parse_args(argv)
 
     s = get_settings()
@@ -42,6 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "serve":
         from .api import main as serve
         serve()
+        return 0
+    if args.cmd == "prebuild":
+        from .prebuild import prebuild
+        print(json.dumps(to_jsonable(prebuild(s)), indent=2))
         return 0
     store = Store(s.database)
     if args.cmd == "import":

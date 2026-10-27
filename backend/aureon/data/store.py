@@ -233,6 +233,13 @@ class Store:
             out.append(d)
         return out
 
+    def coverage(self) -> dict:
+        c = self._conn
+        first, last, days = c.execute(
+            "SELECT min(trade_date), max(trade_date), count(DISTINCT trade_date) FROM quotes").fetchone()
+        symbols = [r[0] for r in c.execute("SELECT DISTINCT symbol FROM quotes ORDER BY symbol")]
+        return {"first_date": first, "last_date": last, "trading_days": days or 0, "symbols": symbols}
+
     def counts(self) -> dict:
         c = self._conn
         return {

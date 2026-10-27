@@ -130,8 +130,8 @@ export function noDataState() {
 
 export function loading(text = "Calculating…") { return `<div class="panel"><div class="loading" role="status"><span class="spinner"></span>${esc(text)}</div></div>`; }
 export function errorBox(e, retry = false) {
-  return `<div class="alert err" role="alert"><span class="dot err"></span><div><b>Something went wrong.</b> ${esc(e.message || e)}
-    <div class="caption" style="margin-top:4px">If this keeps happening, check that the Aureon server is still running.</div>
+  return `<div class="alert err" role="alert"><span class="dot err"></span><div><b>${e.server ? "Server unavailable." : "Something went wrong."}</b> ${esc(e.message || e)}
+    ${e.server ? "" : `<div class="caption" style="margin-top:4px">If this keeps happening, reload the page.</div>`}
     ${retry ? `<button class="btn small" data-retry style="margin-top:8px">Try again</button>` : ""}</div></div>`;
 }
 

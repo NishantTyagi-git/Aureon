@@ -47,13 +47,21 @@ class Service:
 
     # ------------------------------------------------------------------ cached base data
     def _cached(self, key, fn):
+        # The lock only guards the dictionary; the (possibly slow) computation runs outside it so other
+        # requests — health checks in particular — are never blocked behind a heavy calculation.
         with self._lock:
             if self._cache_version != self.store.version:
                 self._cache.clear()
                 self._cache_version = self.store.version
-            if key not in self._cache:
-                self._cache[key] = fn()
-            return self._cache[key]
+            if key in self._cache:
+                return self._cache[key]
+            version = self._cache_version
+        value = fn()
+        with self._lock:
+            if self._cache_version == version:
+                self._cache.setdefault(key, value)
+                return self._cache[key]
+        return value
 
     def panel(self, purity_adjust: bool = True) -> pd.DataFrame:
         return self._cached(("panel", purity_adjust),
@@ -73,15 +81,15 @@ class Service:
 
     # ------------------------------------------------------------------ views
     def status(self) -> dict:
-        p = self.panel()
-        cal = trading_calendar(p)
+        # Answered straight from the database (cheap) — never waits for analytics.
+        cov = self.store.coverage()
         return {
             "counts": self.store.counts(),
-            "has_data": not p.empty,
-            "first_date": cal[0] if len(cal) else None,
-            "last_date": cal[-1] if len(cal) else None,
-            "trading_days": len(cal),
-            "symbols": sorted(p["symbol"].unique().tolist()) if not p.empty else [],
+            "has_data": cov["trading_days"] > 0,
+            "first_date": cov["first_date"],
+            "last_date": cov["last_date"],
+            "trading_days": cov["trading_days"],
+            "symbols": cov["symbols"],
             "tinyfish_configured": bool(self.settings.tinyfish_api_key),
             "collection": self.collection_status,
             "runs": self.store.runs(10),

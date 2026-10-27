@@ -5,7 +5,7 @@ services:
     name: aureon
     runtime: docker
     plan: free
-    healthCheckPath: /api/status
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: AUREON_READ_ONLY

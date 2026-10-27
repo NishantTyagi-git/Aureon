@@ -87,3 +87,34 @@ def test_read_only_blocks_writes(tmp_settings, store, monkeypatch):
     assert c.post("/api/ingest/scan").status_code == 403
     assert c.post("/api/collect/tinyfish", json={"start": "2026-01-01"}).status_code == 403
     assert c.get("/api/overview").status_code == 200  # reading still works
+
+
+def test_prebuilt_answers_match_live_and_are_served(tmp_settings, synthetic_store, monkeypatch):
+    from aureon import api as api_mod
+    from aureon.prebuild import load_prebuilt, prebuild
+
+    tmp_settings.seed_dir = tmp_settings.data_dir / "no-seed"  # database already filled by the fixture
+    synthetic_store.close()
+    summary = prebuild(tmp_settings)
+    assert summary["responses"] > 50
+
+    from aureon.data.store import Store
+    store = Store(tmp_settings.database)
+    files = load_prebuilt(tmp_settings, store)
+    url = "/api/relative-value?a=GOLDTEN&b=GOLDGUINEA&lookback=60&min_dte=10&max_gap=10&carry=true&min_obs=30"
+    key = "/api/relative-value?a=GOLDTEN&b=GOLDGUINEA&carry=true&lookback=60&max_gap=10&min_dte=10&min_obs=30"
+    assert key in files
+
+    live = TestClient(api_mod.create_app(Service(tmp_settings, store))).get(url).content
+    assert files[key].read_bytes() == live
+
+    tmp_settings.read_only = True
+    monkeypatch.setattr(api_mod, "get_settings", lambda: tmp_settings)
+    app = api_mod.create_app(Service(tmp_settings, store))
+    files[key].write_bytes(b'{"served_from": "prebuilt"}')  # prove the file, not a live computation, answers
+    assert TestClient(app).get(url).json() == {"served_from": "prebuilt"}
+
+    store.upsert_quotes([{"trade_date": "2030-01-01", "symbol": "GOLDM", "expiry": "2030-02-05", "open": 1, "high": 1,
+                          "low": 1, "close": 1, "prev_close": 1, "volume_lots": 0, "value_lakhs": 0,
+                          "open_interest": 0}], "test", None)
+    assert load_prebuilt(tmp_settings, store) == {}  # data changed: prebuilt answers are ignored

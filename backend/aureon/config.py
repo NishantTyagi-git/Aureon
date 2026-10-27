@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         return self.db_path or (self.data_dir / "aureon.db")
 
     @property
+    def prebuilt_dir(self) -> Path:
+        return self.data_dir / "prebuilt"
+
+    @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
 

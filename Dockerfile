@@ -12,6 +12,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+# Build the database from data/seed and precompute every read-only page answer, once, at build time.
+RUN python run.py prebuild
 RUN useradd --create-home aureon && chown -R aureon /app
 USER aureon
 

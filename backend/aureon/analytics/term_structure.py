@@ -27,22 +27,25 @@ def calendar_spreads(panel: pd.DataFrame, symbol: str, min_dte: int = 3, traded_
     p = panel[(panel["symbol"] == symbol) & (panel["dte"] >= min_dte)]
     if traded_only:
         p = p[p["traded"]]
-    rows = []
-    for d, g in p.sort_values("expiry").groupby("trade_date"):
-        if len(g) < 2:
-            continue
-        a, b = g.iloc[0], g.iloc[1]
-        dt = (b["expiry"] - a["expiry"]).days
-        if dt <= 0:
-            continue
-        rows.append({
-            "trade_date": d, "front_expiry": a["expiry"], "next_expiry": b["expiry"],
-            "front_norm": a["norm"], "next_norm": b["norm"], "spread": b["norm"] - a["norm"],
-            "spread_bps": 1e4 * np.log(b["norm"] / a["norm"]),
-            "days_between": dt, "implied_carry": np.log(b["norm"] / a["norm"]) / (dt / 365.0),
-            "front_dte": int(a["dte"]),
-        })
-    return pd.DataFrame(rows, columns=cols)
+    # Two nearest qualifying expiries per day, side by side (vectorized; no per-day loop).
+    p = p.sort_values(["trade_date", "expiry"])
+    rank = p.groupby("trade_date").cumcount()
+    f = p[rank == 0].set_index("trade_date")
+    n = p[rank == 1].set_index("trade_date")
+    m = f[["expiry", "norm", "dte"]].join(n[["expiry", "norm"]], how="inner", lsuffix="_f", rsuffix="_n")
+    m["days_between"] = (m["expiry_n"] - m["expiry_f"]).dt.days
+    m = m[m["days_between"] > 0]
+    if m.empty:
+        return pd.DataFrame(columns=cols)
+    log_ratio = np.log(m["norm_n"] / m["norm_f"])
+    out = pd.DataFrame({
+        "trade_date": m.index, "front_expiry": m["expiry_f"].values, "next_expiry": m["expiry_n"].values,
+        "front_norm": m["norm_f"].values, "next_norm": m["norm_n"].values,
+        "spread": (m["norm_n"] - m["norm_f"]).values, "spread_bps": (1e4 * log_ratio).values,
+        "days_between": m["days_between"].values, "implied_carry": (log_ratio / (m["days_between"] / 365.0)).values,
+        "front_dte": m["dte"].astype(int).values,
+    })
+    return out[cols].reset_index(drop=True)
 
 
 def carry_reference(panel: pd.DataFrame, symbols: tuple[str, ...] = ("GOLDM", "GOLD", "GOLDTEN", "GOLDPETAL"),
