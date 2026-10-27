@@ -27,7 +27,7 @@ export default async function test(root) {
           <span class="overline">Trading assumptions</span>
           <div class="form-grid">
             ${select("b-exec", [["next_close", "Next day's closing price"], ["next_open", "Next day's opening price"]], ctx.execution, "Trade at")}
-            ${input("b-cap", ctx.capital, "Account size (₹)", "Used for returns and drops")}
+            ${input("b-cap", ctx.capital, "Account size (₹)", "Used for returns, drops and the margin check")}
           </div>
           <div class="single-only" style="display:none"><span class="overline">Quick test period</span><div class="form-grid" style="margin-top:8px">
             <div class="field"><label for="b-start">From</label><input class="input" type="date" id="b-start"/></div>
@@ -42,7 +42,7 @@ export default async function test(root) {
       <div class="stack" id="out"></div>
     </div>`;
   const ctl = root.querySelector("#ctl"), out = root.querySelector("#out");
-  bindSignalForm(ctl, "s");
+  bindSignalForm(ctl, "s");  // the test only runs when the button is pressed
   let mode = "walkforward";
   const HINTS = {
     walkforward: "Settings are chosen on older data and judged only on later data they never saw — the honest answer. Takes up to a minute.",
@@ -61,6 +61,8 @@ export default async function test(root) {
   const st = await api.status();
   if (!st.has_data) { out.innerHTML = noDataState(); ctl.querySelector("#run").disabled = true; return; }
   ctl.querySelector("#b-start").value = st.first_date; ctl.querySelector("#b-end").value = st.last_date;
+  let auto = null;
+  try { auto = sessionStorage.getItem("aureon.autorun"); sessionStorage.removeItem("aureon.autorun"); } catch {}
   out.innerHTML = `<div class="empty"><h3>Ready when you are</h3><p>The pair and settings are carried over from the Compare and Opportunities pages. Data covers ${date(st.first_date)} to ${date(st.last_date)}. Press <b>Run test</b> to start.</p></div>`;
 
   ctl.querySelector("#run").addEventListener("click", async () => {
@@ -81,15 +83,12 @@ export default async function test(root) {
       const res = mode === "walkforward"
         ? await api.walkforward(researchBody({ walkforward: ctx.walkforward }))
         : await api.backtest(researchBody({ start: val(ctl, "b-start"), end: val(ctl, "b-end") }));
-      if (mode === "walkforward" && !(res.folds || []).length) {
-        out.innerHTML = `<div class="empty"><h3>Not enough history for a realistic test</h3><p>${esc(res.message || "")} ${ctx.a} and ${ctx.b} don't overlap for long enough. Try shorter periods under <b>Advanced test settings</b>, a pair with more history, or the quick test.</p></div>`;
-      } else {
-        toast("Test finished.", 2500, "ok");
-        out.innerHTML = `<div class="row between"><span class="caption">${mode === "walkforward" ? "Results on unseen data only" : "Quick test on the full period — likely to look better than reality"}</span><a class="btn small" href="#/results">Open full results →</a></div><div class="stack" id="res"></div>`;
-        renderResults(out.querySelector("#res"), res);
-      }
+      toast((res.trades || (res.oos && res.oos.trades) || []).length ? "Test finished." : "Test finished — no trades this time.", 2500, "ok");
+      out.innerHTML = `<div class="row between"><span class="caption">${mode === "walkforward" ? "Results on unseen data only" : "Quick test on the full period — likely to look better than reality"}</span><a class="btn small" href="#/results">Open full results →</a></div><div class="stack" id="res"></div>`;
+      renderResults(out.querySelector("#res"), res);
     } catch (e) {
       out.innerHTML = `<div class="alert err" role="alert"><span class="dot err"></span><div><b>The test couldn't run.</b> ${esc(e.message)}</div></div>`;
     } finally { btn.disabled = false; btn.textContent = "Run test"; }
   });
+  if (auto) { setMode(auto); ctl.querySelector("#run").click(); }
 }

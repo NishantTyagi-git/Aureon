@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 
 TRADING_DAYS = 252
+# Assumed exchange margin as a share of position value (both legs). MCX gold futures margins are
+# typically in the 6-10 % range and change with volatility; this is an estimate, not a quote.
+MARGIN_RATE = 0.08
 
 
 def max_drawdown(equity: pd.Series) -> tuple[float, float]:
@@ -45,7 +48,11 @@ def performance(result: dict, capital: float, gold_returns: pd.Series | None = N
         "turnover": float(_turnover(trades) / capital) if len(trades) else 0.0,
         "avg_gross_notional": float(daily.loc[daily["in_position"], "gross_notional"].mean())
         if daily["in_position"].any() else 0.0,
+        "peak_gross_notional": float(daily["gross_notional"].max()) if "gross_notional" in daily else 0.0,
+        "margin_rate": MARGIN_RATE,
     })
+    out["peak_margin"] = out["peak_gross_notional"] * MARGIN_RATE
+    out["margin_exceeds_capital"] = bool(out["peak_margin"] > capital)
     if len(trades):
         wins = trades["net"] > 0
         gw, gl = trades.loc[wins, "net"].sum(), -trades.loc[~wins, "net"].sum()

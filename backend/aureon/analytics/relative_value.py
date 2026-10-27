@@ -32,7 +32,7 @@ from .term_structure import carry_reference
 class PairConfig:
     a: str = "GOLDM"
     b: str = "GOLDTEN"
-    min_dte: int = 5
+    min_dte: int = 10  # same as the signal engine's entry rule, so compared contracts are tradable
     max_expiry_gap: int = 10
     carry_adjust: bool = True
     lookback: int = 60

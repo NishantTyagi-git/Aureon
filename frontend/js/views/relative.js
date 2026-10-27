@@ -28,7 +28,7 @@ export default async function compare(root, params) {
           <div class="form-grid">${input("f-mo", ctx.min_obs, "Min. days of history", "Before judging unusualness")}${input("f-dte", ctx.min_dte, "Skip contracts expiring within (days)", "", "number", "any", "expiry")}
           ${input("f-gap", ctx.max_gap, "Max. expiry mismatch (days)", "How far apart the two expiry dates may be")}</div>
           ${toggle("f-carry", ctx.carry, "Adjust for different expiry dates", "carry")}`)}
-        <div class="row" style="margin-top:16px"><button class="btn primary" id="run">Show comparison</button></div>
+        <p class="caption" style="margin:14px 0 0">The comparison updates as soon as you change a setting.</p>
       </div>
       <div class="stack" id="out"></div>
     </div>`;
@@ -51,7 +51,8 @@ export default async function compare(root, params) {
     }
     render(res, a, b);
   }
-  ctl.querySelector("#run").addEventListener("click", run);
+  let timer;
+  ctl.addEventListener("change", () => { clearTimeout(timer); timer = setTimeout(run, 250); });
   await run();
 
   function render(res, a, b) {
@@ -60,7 +61,7 @@ export default async function compare(root, params) {
     const lb = ctx.lookback;
     out.innerHTML = `
       <div class="panel">
-        <p class="summary-line">On <b>${date(st.last_date)}</b>, ${a} cost <b>${pctText(st.last_spread_bps)}</b> ${st.last_spread_bps >= 0 ? "more" : "less"} than ${b} (₹${num(Math.abs(st.last_spread_abs), 0)} per 10 g of pure gold). That is <b>${esc(zWords(st.last_z))}</b> for the last ${lb} trading days.</p>
+        <p class="summary-line">On <b>${date(st.last_date)}</b>, ${a} cost <b>${Math.abs(st.last_spread_bps / 100).toFixed(2)}%</b> ${st.last_spread_bps >= 0 ? "more" : "less"} than ${b} (₹${num(Math.abs(st.last_spread_abs), 0)} per 10 g of pure gold). That is <b>${esc(zWords(st.last_z))}</b> for the last ${lb} trading days.</p>
         <p class="caption" style="margin-top:8px">Over the whole history the difference averaged ${pctText(st.mean_bps)}${isNum(st.mean_reversion_half_life_days) ? `, and when it strayed it typically closed half the gap in about ${num(st.mean_reversion_half_life_days, 0)} trading days` : ""}.</p>
       </div>
       <div class="stat-row">

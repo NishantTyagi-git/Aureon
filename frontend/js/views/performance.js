@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { lineChart, legend } from "../charts.js";
-import { empty, markVisited, pageHead, panelHead, stat, table, track, workflowBar } from "../components.js";
+import { ctx, empty, markVisited, pageHead, panelHead, saveCtx, stat, table, track, workflowBar } from "../components.js";
 import { cls, date, esc, expiry, inr, inrCompact, int, isNum, num, pct, ts } from "../format.js";
 import { info, pageGuide } from "../help.js";
 
@@ -35,21 +35,53 @@ export function metricsRow(m) {
   </div>`;
 }
 
+/** One-click alternatives offered whenever a test ends without trades, so there is always a next step. */
+function alternatives(res, oos) {
+  const p = res.pair || {};
+  const z = (res.config && res.config.signal && res.config.signal.entry_z) || ctx.signal.entry_z;
+  const opts = [];
+  if (oos) opts.push({ mode: "backtest", patch: {}, label: "Run a quick test on this pair", hint: "uses the whole period" });
+  if (z > 1.5) opts.push({ mode: oos ? "walkforward" : "backtest", patch: { signal: { entry_z: 1.5 } }, label: "Try the Relaxed setting", hint: "flags more moderate gaps" });
+  if (!(p.a === "GOLDM" && p.b === "GOLDGUINEA")) opts.push({ mode: oos ? "walkforward" : "backtest", patch: { a: "GOLDM", b: "GOLDGUINEA" }, label: "Try GOLDM vs GOLDGUINEA", hint: "the pair with the most history" });
+  return `<div class="panel"><h3>Try one of these instead</h3><div class="caption" style="margin:4px 0 12px">Each runs immediately on the Test strategy page.</div><div class="row">${opts.map((o) => `<button class="btn" data-alt-mode="${o.mode}" data-alt-patch='${esc(JSON.stringify(o.patch))}' title="${esc(o.hint)}">${esc(o.label)}</button>`).join("")}</div></div>`;
+}
+
+function bindAlternatives(container) {
+  container.querySelectorAll("[data-alt-mode]").forEach((b) => b.addEventListener("click", () => {
+    saveCtx(JSON.parse(b.dataset.altPatch));
+    try { sessionStorage.setItem("aureon.autorun", b.dataset.altMode); } catch {}
+    if (location.hash.startsWith("#/test")) window.dispatchEvent(new HashChangeEvent("hashchange"));
+    else location.hash = "#/test";
+  }));
+}
+
 export function renderResults(container, res) {
   const oos = res.kind === "walkforward";
   const m = oos ? res.oos_metrics || {} : res.metrics || {};
   const daily = oos ? (res.oos && res.oos.daily) || [] : res.daily || [];
   const trades = oos ? (res.oos && res.oos.trades) || [] : res.trades || [];
   const p = res.pair || {};
+  if (oos && !(res.folds || []).length) {
+    container.innerHTML = empty(`The realistic test couldn't run for ${p.a || "this pair"} vs ${p.b || ""}`,
+      `${esc(res.message || "There wasn't enough shared history.")}`) + alternatives(res, oos);
+    bindAlternatives(container);
+    return;
+  }
+  const capital = (res.config && res.config.capital) || 0;
+  const satOut = oos && (res.folds || []).every((f) => f.status !== "traded");
   container.innerHTML = `
+    ${res.note ? `<div class="alert"><span class="dot"></span><div>${esc(res.note)}</div></div>` : ""}
+    ${m.margin_exceeds_capital ? `<div class="alert warn"><span class="dot warn"></span><div><b>Not realistic for this account size.</b> At its largest the position needed about ${inrCompact(m.peak_margin)} of exchange margin, more than the ${inrCompact(capital)} account. Reduce the position size or raise the account size under advanced settings.</div></div>` : ""}
     ${verdictHtml(m, oos)}
+    ${!trades.length ? alternatives(res, oos) : ""}
+    ${satOut ? `<div class="alert"><span class="dot"></span><div><b>Why no trades?</b> In every period ${esc((res.folds || []).map((f) => f.reason).filter((x, i, a) => a.indexOf(x) === i).join(", or "))}, so the strategy stayed out.</div></div>` : ""}
     ${metricsRow(m)}
     <div class="stat-row">
       ${stat("From the price gap", `<span class="${cls(m.relative_pnl)}">${inrCompact(m.relative_pnl)}</span>`, "what the strategy aims for", "", "relative")}
       ${stat("From gold-price moves", `<span class="${cls(m.directional_pnl)}">${inrCompact(m.directional_pnl)}</span>`, "unmatched gold", "", "directional")}
       ${stat("Costs paid", inrCompact(m.costs), isNum(m.cost_share_of_gross) ? `${pct(m.cost_share_of_gross, 0)} of gross results` : "", "", "costhurdle")}
       ${stat("Time with a position", pct(m.time_in_market, 0), isNum(m.avg_holding_days) ? `avg. ${num(m.avg_holding_days, 1)} trading days per trade` : "")}
-      ${stat("Turnover", isNum(m.turnover) ? `${num(m.turnover, 1)}×` : "—", "value traded ÷ capital", "", "turnover")}
+      ${stat("Margin needed (est.)", inrCompact(m.peak_margin), isNum(m.peak_margin) && capital ? `${pct(m.peak_margin / capital, 0)} of the ${inrCompact(capital)} account` : "", m.margin_exceeds_capital ? "neg" : "", "margin")}
     </div>
     <div class="panel">${panelHead("Account value over time", `${p.a || ""} vs ${p.b || ""} · ${oos ? "unseen test periods only, joined end to end" : "whole period"} · after all costs. The red area shows drops from the previous high.`, "", oos ? "oos" : "insample")}<div id="r-eq"></div><div id="r-dd"></div></div>
     <div class="grid g-2">
@@ -60,11 +92,13 @@ export function renderResults(container, res) {
       <div class="panel">${panelHead("Result of each trade", "After costs, in the order trades closed")}<div id="r-tr"></div></div>
       <div class="panel">${panelHead("Why trades were closed")}<div id="r-exit"></div></div>
     </div>
-    ${oos ? `<div class="panel flush"><div style="padding:20px 20px 0">${panelHead("How the realistic test was run", "For each period: settings were picked on older data, double-checked on the next stretch, then judged on a later period they had never seen. If the double-check failed, the strategy sat that period out.", "", "walkforward")}</div><div id="r-folds"></div></div>` : ""}
-    <div class="panel flush"><div style="padding:20px 20px 0">${panelHead("Every trade", "Each side is a specific contract; prices include slippage")}</div><div id="r-trades"></div></div>`;
+    ${oos ? `<div class="panel flush"><div style="padding:20px 20px 0">${panelHead("How the realistic test was run", "For each period: settings were picked on older data, double-checked on the next stretch, then judged on a later period they had never seen. If the setting lost money in the double-check, the strategy sat that period out.", "", "walkforward")}</div><div id="r-folds"></div></div>` : ""}
+    <details class="panel flush"><summary class="caption" style="cursor:pointer;padding:16px 20px">Every trade (${trades.length}) — dates, contracts and profit of each one</summary><div id="r-trades"></div></details>`;
 
-  if (!daily.length) {
-    container.querySelector("#r-eq").innerHTML = `<div class="table-empty">No daily results to chart.</div>`;
+  bindAlternatives(container);
+  if (!daily.length || !trades.length) {
+    container.querySelector("#r-eq").innerHTML = `<div class="table-empty">${trades.length ? "No daily results to chart." : "No trades were made, so the account value stayed flat."}</div>`;
+    container.querySelector("#r-attr").innerHTML = `<div class="table-empty">Nothing to split — no trades were made.</div>`;
   } else {
     let peak = -Infinity;
     const eq = daily.map((d) => [ts(d.trade_date), d.equity]);
@@ -96,7 +130,9 @@ export function renderResults(container, res) {
       { label: "Settings chosen", render: (f) => (f.chosen ? `<span class="mono">${f.chosen.lookback}-day normal · ${f.chosen.entry_z}σ</span>` : "—") },
       { label: "Double-check result", right: true, render: (f) => inrCompact(f.validation_net) },
       { label: "Unseen result", right: true, render: (f) => `<span class="${cls(f.test_net)}">${inrCompact(f.test_net)}</span>` },
-      { label: "Status", render: (f) => (f.status === "traded" ? `<span class="chip ok">Traded</span>` : `<span class="chip warn" title="${esc(f.reason || "")}">Sat out</span>`) },
+      { label: "Status", render: (f) => (f.status === "traded"
+        ? `<span class="chip ok">Traded</span>${f.confirmed === false ? `<div class="caption" style="white-space:normal;max-width:240px">not double-checked — no signals in that stretch</div>` : ""}`
+        : `<span class="chip warn">Sat out</span><div class="caption" style="white-space:normal;max-width:240px">${esc(f.reason || "")}</div>`) },
     ], res.folds || [], { emptyText: res.message || "No test periods." });
   }
   container.querySelector("#r-trades").innerHTML = table([

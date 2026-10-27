@@ -53,6 +53,7 @@ def test_full_research_flow_on_synthetic_store(tmp_settings, synthetic_store):
     assert c.get("/api/relative-value/matrix").status_code == 200
     sig = c.post("/api/signals", json={"pair": {"a": "GOLDTEN", "b": "GOLDGUINEA", "lookback": 40}}).json()
     assert len(sig["evaluations"]) > 0
+    assert 0 < sig["signal_episodes"] <= sig["signal_count"] or sig["signal_count"] == 0
     bt = c.post("/api/backtest", json={"pair": {"a": "GOLDTEN", "b": "GOLDGUINEA", "lookback": 40},
                                        "signal": {"entry_z": 1.5, "min_open_interest": 0, "target_fine_grams": 100,
                                                   "max_participation": 1.0}}).json()

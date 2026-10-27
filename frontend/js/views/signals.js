@@ -29,7 +29,7 @@ export function signalForm(prefix = "s") {
       </div>
       <span class="overline">Size and trading activity ${info("liquidity")}</span>
       <div class="form-grid">
-        ${input(prefix + "-tg", s.target_fine_grams, "Position size (g of pure gold)", "Per side")}
+        ${input(prefix + "-tg", s.target_fine_grams, "Position size (g of pure gold)", "Per side · 200 g ≈ 2 GOLDM lots")}
         ${input(prefix + "-mr", s.max_residual_pct, "Max. unmatched gold (%)", "", "number", "any", "residual")}
         ${input(prefix + "-mp", s.max_participation, "Max. share of day's volume", "0.05 = 5%")}
         ${input(prefix + "-oi", s.min_open_interest, "Min. open interest (lots)", "", "number", "any", "openinterest")}
@@ -43,8 +43,8 @@ export function signalForm(prefix = "s") {
       </div>`)}`;
 }
 
-export function bindSignalForm(root, prefix = "s") {
-  bindSensitivity(root, prefix + "-sens", (z) => { root.querySelector("#" + prefix + "-ez").value = z; });
+export function bindSignalForm(root, prefix = "s", onChange = null) {
+  bindSensitivity(root, prefix + "-sens", (z) => { root.querySelector("#" + prefix + "-ez").value = z; if (onChange) onChange(); });
 }
 
 export function readSignalForm(root, prefix = "s") {
@@ -74,9 +74,12 @@ export default async function opportunities(root) {
       why: "An unusual gap is only interesting if you could actually trade it. Most unusual days fail at least one check, and seeing <b>why</b> is as useful as the signals themselves.",
       next: "Signals are ideas, not advice. To see whether acting on them would have made money, go to <a href='#/test'>Test strategy</a>.",
     })}
-    <div class="grid g-side"><div class="panel" id="ctl">${signalForm()}<div class="row" style="margin-top:16px"><button class="btn primary" id="run">Check every day</button></div></div><div class="stack" id="out"></div></div>`;
+    <div class="grid g-side"><div class="panel" id="ctl">${signalForm()}<p class="caption" style="margin:14px 0 0">Results update as soon as you change a setting.</p></div><div class="stack" id="out"></div></div>`;
   const ctl = root.querySelector("#ctl"), out = root.querySelector("#out");
-  bindSignalForm(ctl);
+  let timer;
+  const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 300); };
+  bindSignalForm(ctl, "s", schedule);
+  ctl.addEventListener("change", schedule);
   async function run() {
     readSignalForm(ctl);
     root.querySelector(".flow").outerHTML = workflowBar("opportunities");
@@ -91,9 +94,10 @@ export default async function opportunities(root) {
     const fails = Object.entries(res.rejection_counts).sort((a, b) => b[1] - a[1]);
     const unusualDays = ev.filter((e) => isNum(e.z) && Math.abs(e.z) >= ctx.signal.entry_z).length;
     out.innerHTML = `
-      <div class="panel"><p class="summary-line">Of <b>${int(ev.length)}</b> trading days, <b>${int(unusualDays)}</b> had an unusual difference and <b>${int(fired.length)}</b> passed every practical check.${fails.length ? ` Most often, a day didn't qualify because <b>${esc(FAIL_REASONS[fails[0][0]] || fails[0][0])}</b>.` : ""}</p></div>
+      <div class="panel"><p class="summary-line">Of <b>${int(ev.length)}</b> trading days, <b>${int(unusualDays)}</b> had an unusual difference and <b>${int(fired.length)}</b> passed every practical check.${fails.length ? ` Most often, a day didn't qualify because <b>${esc(FAIL_REASONS[fails[0][0]] || fails[0][0])}</b>.` : ""}</p>
+        ${fired.length ? `<p class="caption" style="margin-top:8px">Signals often repeat on several days in a row while a gap stays wide, so these ${int(fired.length)} signal days come from <b>${int(res.signal_episodes)}</b> separate situation${res.signal_episodes === 1 ? "" : "s"}. A strategy test holds one position at a time, so it will make at most about that many trades — often fewer, because a trade may still be open when the next situation starts.</p>` : ""}</div>
       <div class="stat-row">${stat("Days checked", int(ev.length))}${stat("Unusual days", int(unusualDays), `beyond ±${ctx.signal.entry_z}σ`, "", "zscore")}
-        ${stat("Signals", int(fired.length), `${((100 * fired.length) / ev.length).toFixed(1)}% of days`, "", "signal")}
+        ${stat("Signal days", int(fired.length), `${int(res.signal_episodes)} separate situations`, "", "signal")}
         ${stat("Position size", `${last.lots_a} × ${ctx.a}`, `vs ${last.lots_b} × ${ctx.b}`, "", "lot")}${stat("Est. round-trip cost", inr(last.round_trip_cost), "both sides, in and out", "", "costhurdle")}</div>
       <div class="panel">${panelHead(`Latest day · ${date(last.trade_date)}`, last.signal ? "This day qualified as a signal." : "This day did not qualify. Each check is listed with the numbers behind it.", last.signal ? `<span class="chip warn">Signal</span>` : `<span class="chip">No signal</span>`)}${checksHtml(last.checks)}</div>
       <div class="panel">${panelHead("Signals on the timeline", `How unusual each day was. ▲ = buy ${ctx.a} / sell ${ctx.b} (gap below normal); ▼ = the reverse (gap above normal).`, "", "zscore")}<div id="c-z"></div></div>
@@ -130,6 +134,5 @@ export default async function opportunities(root) {
     out.querySelectorAll("#flt button").forEach((b) => b.addEventListener("click", () => { mode = b.dataset.f; out.querySelectorAll("#flt button").forEach((x) => x.classList.toggle("on", x === b)); drawLog(); }));
     drawLog();
   }
-  ctl.querySelector("#run").addEventListener("click", run);
   await run();
 }

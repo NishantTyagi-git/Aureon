@@ -130,8 +130,17 @@ reversion to the rolling mean — an optimistic upper bound, which is why a cost
 
 Folds of `train | validation | test` pair observations, rolled forward by the test length:
 parameters (lookback × entry z grid) are chosen on train by net P&L (≥ `min_train_trades`),
-confirmed on validation (fold **abstains** if validation net ≤ 0), then applied unchanged to the
+confirmed on validation (fold **abstains** if the setting traded there and lost money; a validation window with no trades is not counted against it and the fold is marked unconfirmed), then applied unchanged to the
 unseen test window. Only test windows are stitched into the reported out-of-sample result.
+
+If a pair has fewer shared trading days than train + validation + test (e.g. GOLDTEN pairs, whose
+history starts in March 2025), the windows are shortened to 55 % / 15 % / 15 % of the available days
+and the result says so. Below 150 shared days the test is refused. A period sits out only when the chosen
+setting traded in the validation window and lost money; the reason is reported per period.
+
+**Sizing and margin.** Defaults: 200 g of pure gold per side and a ₹10 lakh account. Results report the
+peak exchange margin, estimated at 8 % of the value of both legs (MCX gold margins are typically
+6–10 % and vary with volatility), and warn when it exceeds the account size.
 
 ## 10. Verdicts
 

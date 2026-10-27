@@ -5,18 +5,27 @@ import { info } from "./help.js";
 // ---------------------------------------------------------------- shared research context
 // One pair / window / threshold selection flows through Compare → Opportunities → Test strategy.
 const DEFAULT_CTX = {
-  a: "GOLDM", b: "GOLDTEN", lookback: 60, min_dte: 5, max_gap: 10, carry: true, min_obs: 30,
+  a: "GOLDM", b: "GOLDGUINEA", lookback: 60, min_dte: 10, max_gap: 10, carry: true, min_obs: 30,
   signal: { entry_z: 2.0, exit_z: 0.5, stop_z: 4.0, min_entry_dte: 10, exit_dte: 3, max_holding_days: 30,
     max_participation: 0.05, min_open_interest: 50, min_segment_obs: 3, cost_multiple: 1.5, max_residual_pct: 5,
-    target_fine_grams: 1000 },
+    target_fine_grams: 200 },
   costs: { brokerage_per_order: 20, exchange_txn_rate: 0.000021, ctt_sell_rate: 0.0001, stamp_buy_rate: 0.00002,
     sebi_fee_rate: 0.000001, gst_rate: 0.18, slippage_ticks: 1 },
-  execution: "next_close", capital: 2000000,
+  execution: "next_close", capital: 1000000, version: 3,
   walkforward: { train_days: 250, validation_days: 60, test_days: 60, lookbacks: [20, 40, 60, 120], entry_zs: [1.5, 2.0, 2.5, 3.0], min_train_trades: 3 },
 };
 
 function load() {
-  try { const s = JSON.parse(localStorage.getItem("aureon.ctx") || "null"); if (s) return deepMerge(structuredClone(DEFAULT_CTX), s); } catch {}
+  try {
+    const s = JSON.parse(localStorage.getItem("aureon.ctx") || "null");
+    if (s) {
+      // v2 switched to realistic default sizing; older saved settings keep everything else.
+      if ((s.version || 1) < 2) { delete s.capital; if (s.signal) delete s.signal.target_fine_grams; }
+      // v3 compares contracts only while they are still tradable (≥10 days to expiry).
+      if ((s.version || 1) < 3) { if ((s.min_dte || 0) < 10) delete s.min_dte; s.version = 3; }
+      return deepMerge(structuredClone(DEFAULT_CTX), s);
+    }
+  } catch {}
   return structuredClone(DEFAULT_CTX);
 }
 function deepMerge(a, b) {

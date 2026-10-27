@@ -202,8 +202,14 @@ class Service:
             for c in e["checks"]:
                 if not c["passed"]:
                     fails[c["check"]] = fails.get(c["check"], 0) + 1
+        # Signals on consecutive days usually describe one situation (and one trade in a backtest).
+        episodes, prev = 0, False
+        for e in ev:
+            on = bool(e["signal"])
+            episodes += on and not prev
+            prev = on
         return {"pair": pair_cfg.to_dict(), "signal_config": sig.to_dict(), "costs": costs.to_dict(),
-                "evaluations": ev, "signal_count": sum(1 for e in ev if e["signal"]),
+                "evaluations": ev, "signal_count": sum(1 for e in ev if e["signal"]), "signal_episodes": episodes,
                 "rejection_counts": fails, "series": m.tail(last_n)}
 
     def backtest(self, pair_cfg: PairConfig, bt: BacktestConfig, start: str | None, end: str | None,

@@ -153,6 +153,11 @@ def test_walk_forward_is_chronological(setup):
     prev_test_end = None
     for f in res["folds"]:
         assert f["train"][1] < f["validation"][0] <= f["validation"][1] < f["test"][0] <= f["test"][1]
+        if f.get("status") == "abstain" and "validation_trades" in f:
+            # only a losing validation period stops a fold; a quiet one does not
+            assert f["validation_trades"] > 0 and f["validation_net"] <= 0
+        if f.get("status") == "traded":
+            assert f["confirmed"] == (f["validation_trades"] > 0)
         if prev_test_end is not None:
             assert f["test"][0] > prev_test_end
         prev_test_end = f["test"][1]
@@ -166,3 +171,30 @@ def test_no_trades_without_data():
     res = run_backtest(make_panel(n_days=30), pd.DataFrame(), cfg())
     assert res["trades"] == []
     assert performance(res, 1e6)["verdict"] == "no_data"
+
+
+def test_walk_forward_shrinks_windows_for_short_history(setup):
+    panel, carry, pc, pair = setup
+    n = pair["trade_date"].nunique()
+    wf = WalkForwardConfig(train_days=n, validation_days=60, test_days=60, lookbacks=[40], entry_zs=[2.0])
+    res = walk_forward(panel, cfg(), pc, wf, carry)
+    assert res["folds"], res.get("message")
+    assert res["note"] and "shortened" in res["note"]
+    for f in res["folds"]:
+        assert f["train"][1] < f["validation"][0] < f["test"][0]
+
+
+def test_walk_forward_refuses_tiny_overlap():
+    panel = make_panel(n_days=100, guinea_spread_bps=15)
+    carry = carry_reference(panel)
+    pc = PairConfig(a="GOLDTEN", b="GOLDGUINEA", lookback=20, min_obs=10)
+    res = walk_forward(panel, cfg(), pc, WalkForwardConfig(lookbacks=[20], entry_zs=[2.0]), carry)
+    assert res["folds"] == [] and "at least" in res["message"]
+
+
+def test_margin_estimate_reported(setup):
+    panel, carry, pc, pair = setup
+    res = run_backtest(panel, pair, cfg(), carry=carry)
+    m = performance(res, 1_000)
+    assert m["peak_margin"] == pytest.approx(m["peak_gross_notional"] * m["margin_rate"])
+    assert m["margin_exceeds_capital"] is True

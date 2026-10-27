@@ -77,8 +77,7 @@ export default async function home(root) {
       <div class="panel flush">${`<div style="padding:20px 20px 0">${panelHead("Price differences right now", "Click a pair to study it in detail. “How unusual” compares today's gap with its last 60 trading days.", "", "spread")}</div>`}<div id="matrix"></div></div>
       <div class="panel">${panelHead("Today's opportunity check", "Every pair is checked against the practical rules. Most days, nothing qualifies — that is expected.", `<a class="btn small" href="#/opportunities">See all</a>`, "signal")}<div id="sigs" class="list"></div></div>
     </div>
-    ${ov.warnings.length ? `<div class="panel section">${panelHead("Data health notes", "Things to keep in mind when reading the numbers", `<a class="btn small" href="#/data/health">Data health</a>`)}${warnings(ov.warnings, 4)}</div>` : ""}
-    <div class="section"><span class="overline">Your research path</span><div style="margin-top:10px">${steps(state)}</div></div>`;
+    ${ov.warnings.length ? `<div class="panel section">${panelHead("Data health notes", "Things to keep in mind when reading the numbers", `<a class="btn small" href="#/data/health">Data health</a>`)}${warnings(ov.warnings, 4)}</div>` : ""}`;
 
   root.querySelector("#quotes").innerHTML = ov.snapshot.map((s) => !s.available ? `<div class="card"><b class="mono">${s.symbol}</b><div class="caption" style="margin-top:12px">No actively traded contract on the latest date.</div></div>` : `
     <a class="card interactive quote-card" href="#/market/curves/${s.symbol}" title="Open the ${s.symbol} price curve">

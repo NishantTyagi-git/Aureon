@@ -35,7 +35,7 @@ class BacktestConfig:
     a: str = "GOLDM"
     b: str = "GOLDTEN"
     execution: str = "next_close"  # or "next_open"
-    capital: float = 2_000_000.0  # ₹ capital base for return/drawdown figures
+    capital: float = 1_000_000.0  # ₹ account size for return/drawdown/margin figures
     signal: SignalConfig = field(default_factory=SignalConfig)
     costs: CostModel = field(default_factory=CostModel)
 
@@ -58,6 +58,23 @@ class _Leg:
 def _norm(price: float, symbol: str) -> float:
     s = get_spec(symbol)
     return price * 10.0 / s.quote_grams * 1000.0 / s.purity
+
+
+# Lookups derived from the (immutable) panel / pair frames are reused across the many backtests a
+# walk-forward run makes; entries are only valid while the very same frame object is alive.
+_LOOKUPS: dict = {}
+
+
+def _lookup(obj, key, build):
+    k = (id(obj), key)
+    hit = _LOOKUPS.get(k)
+    if hit is not None and hit[0] is obj:
+        return hit[1]
+    if len(_LOOKUPS) > 64:
+        _LOOKUPS.clear()
+    value = build()
+    _LOOKUPS[k] = (obj, value)
+    return value
 
 
 class _Prices:
@@ -85,7 +102,8 @@ def run_backtest(panel: pd.DataFrame, pair: pd.DataFrame, cfg: BacktestConfig,
     sc, costs = cfg.signal, cfg.costs
     a, b = cfg.a, cfg.b
     sa, sb = get_spec(a), get_spec(b)
-    cal = pd.DatetimeIndex(sorted(panel["trade_date"].unique()))
+    all_dates = _lookup(panel, "calendar", lambda: pd.DatetimeIndex(sorted(panel["trade_date"].unique())))
+    cal = all_dates
     if start is not None:
         cal = cal[cal >= start]
     if end is not None:
@@ -94,10 +112,10 @@ def run_backtest(panel: pd.DataFrame, pair: pd.DataFrame, cfg: BacktestConfig,
     if pair.empty or len(cal) < 2:
         return empty
 
-    pair = with_segment_obs(pair).set_index("trade_date")
-    carry_map = {} if carry is None or carry.empty else dict(zip(carry["trade_date"], carry["carry"]))
-    prices = _Prices(panel, (a, b))
-    all_dates = pd.DatetimeIndex(sorted(panel["trade_date"].unique()))
+    # Plain dicts per day: far faster than pandas row access inside the daily loop.
+    pair = _lookup(pair, "rows", lambda: {r["trade_date"]: r for r in with_segment_obs(pair).to_dict("records")})
+    carry_map = {} if carry is None or carry.empty else _lookup(carry, "map", lambda: dict(zip(carry["trade_date"], carry["carry"])))
+    prices = _lookup(panel, ("prices", a, b), lambda: _Prices(panel, (a, b)))
     sizing = size_pair(a, b, sc.target_fine_grams)
 
     position: dict | None = None
@@ -204,8 +222,8 @@ def run_backtest(panel: pd.DataFrame, pair: pd.DataFrame, cfg: BacktestConfig,
                 pending = {"type": "exit", "reason": reason, "decided": d}
 
         # 4) entry decisions --------------------------------------------------------------------
-        if position is None and pending is None and d in pair.index and d < last_date:
-            row = pair.loc[d].copy()
+        if position is None and pending is None and d in pair and d < last_date:
+            row = dict(pair[d])
             row["trade_date"] = d
             ev = evaluate_day(row, a, b, sc, costs, sizing, flagged)
             signals.append(ev)
@@ -248,9 +266,9 @@ def _apply_marks(position: dict, pa: float, pb: float, day: dict) -> float:
 
 def _held_z(position: dict, d, pair: pd.DataFrame, carry_map: dict) -> float | None:
     la, lb = position["legs"]
-    if d not in pair.index:
+    if d not in pair:
         return None
-    row = pair.loc[d]
+    row = pair[d]
     if pd.isna(row["std"]) or row["std"] <= 0:
         return None
     r = carry_map.get(d, np.nan)

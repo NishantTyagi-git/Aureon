@@ -29,7 +29,7 @@ class SignalConfig:
     min_segment_obs: int = 3  # trading days on the current contract pair before entries are allowed
     cost_multiple: float = 1.5  # expected edge must exceed this multiple of round-trip cost
     max_residual_pct: float = 5.0  # hedge residual (fine grams) as % of leg A
-    target_fine_grams: float = 1000.0
+    target_fine_grams: float = 200.0  # per side; ~2 GOLDM lots, a realistic retail/prop size
 
     def to_dict(self) -> dict:
         return asdict(self)

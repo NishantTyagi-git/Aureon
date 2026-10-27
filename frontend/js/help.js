@@ -34,6 +34,7 @@ export const GLOSSARY = {
   winrate: { t: "Win rate", s: "Share of trades that made money after costs." },
   directional: { t: "Gold-price effect", s: "Profit or loss caused by the overall gold price moving, because the two sides were not perfectly matched. Not part of the price-difference idea." },
   relative: { t: "Price-difference effect", s: "Profit or loss from the gap between the two contracts changing — the part the strategy is actually trying to capture." },
+  margin: { t: "Margin", s: "Money the exchange requires you to keep aside while a position is open — roughly 6–10% of the position's value for MCX gold. Aureon assumes 8% for both sides. If this is larger than your account, the test isn't realistic." },
   turnover: { t: "Turnover", s: "Total value traded divided by capital — how actively the strategy trades." },
   termstructure: { t: "Price curve (term structure)", s: "Prices of the same product for different expiry dates, side by side. Usually later expiries cost more because of carry." },
   calendar: { t: "Calendar spread", s: "Price difference between two expiry months of the same product." },

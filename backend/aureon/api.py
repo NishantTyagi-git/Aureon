@@ -45,12 +45,15 @@ def _pair_cfg(a, b, lookback, min_dte, max_gap, carry, min_obs) -> PairConfig:
 
 def _configs(body: dict) -> tuple[PairConfig, BacktestConfig]:
     p = body.get("pair", {})
-    pc = _pair_cfg(p.get("a", "GOLDM"), p.get("b", "GOLDTEN"), int(p.get("lookback", 60)), int(p.get("min_dte", 5)),
+    pc = _pair_cfg(p.get("a", "GOLDM"), p.get("b", "GOLDTEN"), int(p.get("lookback", 60)), int(p.get("min_dte", 10)),
                    int(p.get("max_expiry_gap", 10)), bool(p.get("carry_adjust", True)), int(p.get("min_obs", 30)))
     sig = build_dataclass(SignalConfig, body.get("signal"))
     costs = build_dataclass(CostModel, body.get("costs"))
     bt = BacktestConfig(a=pc.a, b=pc.b, execution=body.get("execution", "next_close"),
-                        capital=float(body.get("capital", 2_000_000)), signal=sig, costs=costs)
+                        capital=float(body.get("capital", 1_000_000)), signal=sig, costs=costs)
+    # Compare only contracts the strategy is allowed to trade; otherwise unusual gaps near expiry are
+    # detected on contracts that the entry rule then forbids, and the strategy can never act.
+    pc.min_dte = max(pc.min_dte, int(sig.min_entry_dte))
     if bt.execution not in ("next_close", "next_open"):
         raise HTTPException(400, "execution must be next_close or next_open")
     if sig.exit_dte < 2:
@@ -109,7 +112,7 @@ def create_app(service: Service | None = None) -> FastAPI:
 
     # ---------------------------------------------------------------- research
     @app.get("/api/relative-value")
-    def relative_value(a: str = "GOLDM", b: str = "GOLDTEN", lookback: int = 60, min_dte: int = 5,
+    def relative_value(a: str = "GOLDM", b: str = "GOLDTEN", lookback: int = 60, min_dte: int = 10,
                        max_gap: int = 10, carry: bool = True, min_obs: int = 30):
         res = svc.relative_value(_pair_cfg(a, b, lookback, min_dte, max_gap, carry, min_obs))
         cols = ["trade_date", "expiry_a", "expiry_b", "close_a", "close_b", "norm_a", "norm_b", "adj_a", "adj_b",
@@ -120,7 +123,7 @@ def create_app(service: Service | None = None) -> FastAPI:
         return J(res)
 
     @app.get("/api/relative-value/matrix")
-    def matrix(lookback: int = 60, min_dte: int = 5, max_gap: int = 10, carry: bool = True):
+    def matrix(lookback: int = 60, min_dte: int = 10, max_gap: int = 10, carry: bool = True):
         return J(svc.matrix(PairConfig(lookback=lookback, min_dte=min_dte, max_expiry_gap=max_gap, carry_adjust=carry,
                                        min_obs=min(30, lookback))))
 
@@ -222,6 +225,10 @@ def create_app(service: Service | None = None) -> FastAPI:
         @app.get("/")
         def index():
             return FileResponse(FRONTEND / "index.html")
+
+        @app.get("/favicon.ico", include_in_schema=False)
+        def favicon():
+            return FileResponse(FRONTEND / "favicon.svg", media_type="image/svg+xml")
 
     return app
 

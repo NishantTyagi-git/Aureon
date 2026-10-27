@@ -37,7 +37,11 @@ backtested profits rest on a handful of trades, concentrate in one market-stress
   the small contracts). AR(1) half-lives within contract pairs: ~7 days (GOLDM/TEN, GOLDM/GUINEA,
   TEN/GUINEA), 12–26 days (Petal pairs), ~72 days (GUINEA/PETAL).
 
-## Backtests (default settings: |z| ≥ 2 on a 60-obs window, 1 kg fine target, next-day close fills, 1-tick slippage, statutory costs, cost hurdle 1.5×)
+> Note: the figures below were produced with the earlier default size of 1 kg of pure gold per side on a
+> ₹20 lakh account. Current defaults are 200 g and ₹10 lakh, so rupee amounts in the app are smaller; the
+> conclusions do not change.
+
+## Backtests (original settings: |z| ≥ 2 on a 60-obs window, 1 kg fine target, next-day close fills, 1-tick slippage, statutory costs, cost hurdle 1.5×)
 
 | Pair | Trades | Net (₹) | Net excl. best trade | Trade t | Walk-forward OOS |
 |---|---|---|---|---|---|
@@ -71,3 +75,27 @@ Why these numbers are not evidence of an edge:
 
 All figures are reproducible in the app (Relative value, Backtest, Performance & risk) from the
 archived raw payload.
+
+## Update — 27 Oct 2026: 2019–2026 history and revised test rules
+
+Data now covers **2 Jan 2019 – 23 Oct 2026** (2,005 exchange days; 37,463 validated rows). GOLDTEN still
+starts 31 Mar 2025 — it did not trade on MCX before that. Contract sizes re-verified from turnover for
+every product (100 % of traded rows consistent).
+
+Rule changes since the first run: comparisons use only contracts with ≥ 10 days to expiry (the same rule
+as trade entry), a quiet validation window no longer blocks a test period, short histories get shorter
+but more numerous test periods, and the default size is 200 g of pure gold per side on a ₹10 lakh account.
+
+| Pair | Realistic test (unseen data) | Quick test (full period) |
+|---|---|---|
+| GOLDM / GOLDGUINEA | 22 periods, 60 trades, **+₹2.49 L**, t = 1.43 — profit could be luck | 50 trades, +₹3.55 L, t = 2.28 |
+| GOLDM / GOLDPETAL | 22 periods, 41 trades, +₹26 k, t = 0.36 | 45 trades, +₹59 k, t = 0.90 |
+| GOLDGUINEA / GOLDPETAL | 28 periods, 24 trades, +₹1.7 k, t = 0.05 | 50 trades, +₹54 k, t = 0.72 |
+| GOLDM / GOLDTEN | 4 periods, 0 trades (no unusual gaps in unseen periods) | 7 trades, +₹68 k |
+| GOLDTEN / GOLDGUINEA | 4 periods, 3 trades, −₹2.3 k | 14 trades, +₹81 k |
+| GOLDTEN / GOLDPETAL | 4 periods, 11 trades, +₹3.7 k | 11 trades, +₹38 k |
+
+The conclusion holds and is now better supported: with up to 60 out-of-sample trades, no pair shows
+statistically significant profit after costs. GOLDM / GOLDGUINEA is the most promising (positive in every
+test, t ≈ 1.4 out of sample) and is the pair worth monitoring, but the evidence does not yet rule out luck.
+Peak margin at the default size is about ₹5 lakh, half the default account.
