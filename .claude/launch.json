@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aureon",
+      "runtimeExecutable": "D:\\Aureon\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["run.py"],
+      "port": 8000
+    }
+  ]
+}
