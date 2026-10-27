@@ -134,7 +134,7 @@ def quality_report(panel: pd.DataFrame, rejections: pd.DataFrame, duplicates: pd
     today = today or date.today()
     if panel.empty:
         return {"empty": True, "rejections": _reason_counts(rejections), "warnings": [
-            {"level": "error", "code": "no_data", "message": "No validated market data has been ingested yet."}]}
+            {"level": "error", "code": "no_data", "message": "No market data has been loaded yet."}]}
     cal = trading_calendar(panel)
     contracts = contract_table(panel)
     miss = missing_dates(panel)
@@ -150,42 +150,42 @@ def quality_report(panel: pd.DataFrame, rejections: pd.DataFrame, duplicates: pd
     warnings = []
     if bdays_behind > 2:
         warnings.append({"level": "warn", "code": "stale_dataset",
-                         "message": f"Latest data is {latest} — {bdays_behind} business days behind today."})
+                         "message": f"The newest prices are from {latest}, {bdays_behind} business days ago. Load recent data to stay current."})
     for sym in RESEARCH_SYMBOLS:
         if sym not in set(panel["symbol"]):
-            warnings.append({"level": "warn", "code": "symbol_missing", "message": f"No data for {sym}."})
+            warnings.append({"level": "warn", "code": "symbol_missing", "message": f"No data has been loaded for {sym}."})
     if len(gaps):
         warnings.append({"level": "warn", "code": "symbol_gaps",
-                         "message": f"{len(gaps)} symbol-days missing inside covered ranges (collection gaps)."})
+                         "message": f"{len(gaps)} trading days have no data for a product that was otherwise covered — likely gaps in collection."})
     if len(miss):
         warnings.append({"level": "info", "code": "contract_missing_days",
-                         "message": f"{len(miss)} contract-days missing while contracts were live."})
+                         "message": f"{len(miss)} days where a contract was trading but no price was published for it."})
     if len(sus):
         warnings.append({"level": "warn", "code": "suspicious_moves",
-                         "message": f"{len(sus)} suspicious single-day moves flagged for review."})
+                         "message": f"{len(sus)} unusually large one-day price jumps were flagged. Most match real market events (e.g. late Jan 2026), but they are worth a look."})
     if len(xo):
         warnings.append({"level": "warn", "code": "cross_product_outliers",
-                         "message": f"{len(xo)} days where one product's front price deviates >150 bps from peers."})
+                         "message": f"On {len(xo)} days one product's comparable price was more than 1.5% away from the others — partly persistent premiums of the small contracts."})
     for s in specv:
         if s["verdict"] != "confirmed":
             warnings.append({"level": "error", "code": "spec_unverified",
-                             "message": f"{s['symbol']}: turnover-implied price does not confirm lot/quote units."})
+                             "message": f"{s['symbol']}: the traded values don't match the assumed contract size — normalized prices may be wrong."})
     for t in ticks:
         if t["conforming_pct"] is not None and t["conforming_pct"] < 99:
             warnings.append({"level": "info", "code": "tick_mismatch",
-                             "message": f"{t['symbol']}: {t['off_grid']} prices off the assumed ₹{t['assumed_tick']} grid."})
+                             "message": f"{t['symbol']}: {t['off_grid']} prices are not whole multiples of the assumed ₹{t['assumed_tick']} price step."})
     failed = collection_failures(rejections)
     if failed:
         warnings.append({"level": "warn", "code": "collection_failures",
-                         "message": f"{len(failed)} requested day(s) failed to download and are absent from the "
-                                    f"calendar: {', '.join(failed[:8])}{'…' if len(failed) > 8 else ''}."})
+                         "message": f"{len(failed)} day(s) failed to download and are missing entirely: "
+                                    f"{', '.join(failed[:8])}{'…' if len(failed) > 8 else ''}. Re-collect them to fill the gap."})
     if len(rejections):
         warnings.append({"level": "info", "code": "rejections",
-                         "message": f"{len(rejections)} rows rejected during validation (kept for audit)."})
+                         "message": f"{len(rejections)} rows were rejected when importing (kept for audit, never used)."})
     if len(duplicates) and (duplicates["identical"] == 0).any():
         n = int((duplicates["identical"] == 0).sum())
         warnings.append({"level": "warn", "code": "conflicting_duplicates",
-                         "message": f"{n} conflicting duplicate observations (first-ingested value kept)."})
+                         "message": f"{n} prices were imported twice with different values; the first one is kept."})
 
     coverage_by_symbol = []
     for sym, g in panel.groupby("symbol"):

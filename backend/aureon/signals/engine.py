@@ -48,18 +48,18 @@ def evaluate_day(row: pd.Series, a: str, b: str, cfg: SignalConfig, costs: CostM
 
     has_stats = pd.notna(z) and pd.notna(row.get("std")) and row.get("std", 0) > 0
     checks.append(_check("history", has_stats,
-                         "rolling statistics available" if has_stats else "not enough observations in lookback"))
+                         "enough past days to define normal" if has_stats else "not enough past days yet to judge what is normal"))
     zval = float(z) if has_stats else float("nan")
     checks.append(_check("z_threshold", has_stats and abs(zval) >= cfg.entry_z,
-                         f"|z| = {abs(zval):.2f} vs entry {cfg.entry_z:.2f}" if has_stats else "z unavailable"))
+                         f"{abs(zval):.2f} typical swings from normal (needs {cfg.entry_z:.2f})" if has_stats else "cannot judge yet"))
 
     dte_ok = row["dte_a"] >= cfg.min_entry_dte and row["dte_b"] >= cfg.min_entry_dte
     checks.append(_check("expiry", dte_ok,
-                         f"days to expiry A={int(row['dte_a'])}, B={int(row['dte_b'])} (min {cfg.min_entry_dte})"))
+                         f"{a} expires in {int(row['dte_a'])} days, {b} in {int(row['dte_b'])} days (need at least {cfg.min_entry_dte})"))
 
     seg_ok = row.get("segment_obs", cfg.min_segment_obs) >= cfg.min_segment_obs
     checks.append(_check("roll_settled", seg_ok,
-                         f"{int(row.get('segment_obs', 0))} days on current contract pair (min {cfg.min_segment_obs})"))
+                         f"{int(row.get('segment_obs', 0))} days since the last contract switch (need {cfg.min_segment_obs})"))
 
     part_a = sizing.lots_a / row["volume_lots_a"] if row["volume_lots_a"] else np.inf
     part_b = sizing.lots_b / row["volume_lots_b"] if row["volume_lots_b"] else np.inf
@@ -67,14 +67,14 @@ def evaluate_day(row: pd.Series, a: str, b: str, cfg: SignalConfig, costs: CostM
             (row.get("open_interest_b") or 0) >= cfg.min_open_interest
     liq_ok = part_a <= cfg.max_participation and part_b <= cfg.max_participation and oi_ok
     checks.append(_check("liquidity", liq_ok,
-                         f"participation A={part_a:.1%}, B={part_b:.1%} (max {cfg.max_participation:.0%}); "
-                         f"OI A={row.get('open_interest_a', 0):.0f}, B={row.get('open_interest_b', 0):.0f} "
-                         f"(min {cfg.min_open_interest:.0f})"))
+                         f"our size would be {part_a:.1%} of {a}'s and {part_b:.1%} of {b}'s daily volume (max {cfg.max_participation:.0%}); "
+                         f"open interest {row.get('open_interest_a', 0):,.0f} / {row.get('open_interest_b', 0):,.0f} lots "
+                         f"(need {cfg.min_open_interest:,.0f})"))
 
     resid_ok = abs(sizing.residual_pct) <= cfg.max_residual_pct
     checks.append(_check("hedge_residual", resid_ok,
-                         f"{sizing.lots_a}×{a} vs {sizing.lots_b}×{b}: residual {sizing.residual_fine_grams:+.2f} g fine "
-                         f"({sizing.residual_pct:+.2f}%)"))
+                         f"{sizing.lots_a} lots of {a} vs {sizing.lots_b} lots of {b}: {abs(sizing.residual_fine_grams):.2f} g of pure gold "
+                         f"left unmatched ({abs(sizing.residual_pct):.2f}%, max {cfg.max_residual_pct:g}%)"))
 
     notional_a = sizing.lots_a * row["close_a"] * sa.quote_units_per_lot
     notional_b = sizing.lots_b * row["close_b"] * sb.quote_units_per_lot
@@ -84,14 +84,14 @@ def evaluate_day(row: pd.Series, a: str, b: str, cfg: SignalConfig, costs: CostM
         (notional_a, sa.tick, sizing.lots_a * sa.quote_units_per_lot),
         (notional_b, sb.tick, sizing.lots_b * sb.quote_units_per_lot)])
     checks.append(_check("cost_hurdle", edge >= cfg.cost_multiple * rt_cost,
-                         f"expected reversion edge ₹{edge:,.0f} vs {cfg.cost_multiple:.1f}× round-trip cost "
-                         f"₹{rt_cost:,.0f}"))
+                         f"gain if the gap returned to normal ≈ ₹{edge:,.0f}; needs ₹{cfg.cost_multiple * rt_cost:,.0f} "
+                         f"({cfg.cost_multiple:g}× estimated costs of ₹{rt_cost:,.0f})"))
 
     dq_ok = True
     if flagged:
         dq_ok = not ((row["trade_date"], a, row["expiry_a"]) in flagged or (row["trade_date"], b, row["expiry_b"]) in flagged)
-    checks.append(_check("data_quality", dq_ok, "no quality flags on either leg" if dq_ok
-                         else "a leg has a suspicious-move flag on this day"))
+    checks.append(_check("data_quality", dq_ok, "no data problems flagged for either contract" if dq_ok
+                         else "one contract had a suspicious price jump this day"))
 
     all_ok = all(c["passed"] for c in checks)
     direction = None
@@ -99,10 +99,10 @@ def evaluate_day(row: pd.Series, a: str, b: str, cfg: SignalConfig, costs: CostM
         direction = "short_spread" if zval > 0 else "long_spread"
     failed = [c["check"] for c in checks if not c["passed"]]
     if all_ok:
-        verb = f"Sell {a} / buy {b}" if direction == "short_spread" else f"Buy {a} / sell {b}"
-        summary = (f"{verb}: spread {row['spread_bps']:+.1f} bps is {abs(zval):.2f}σ "
-                   f"{'above' if zval > 0 else 'below'} its {int(row.get('lookback', 0)) or ''} rolling mean; "
-                   f"edge ₹{edge:,.0f} vs cost ₹{rt_cost:,.0f}.")
+        verb = f"sell {a} and buy {b}" if direction == "short_spread" else f"buy {a} and sell {b}"
+        summary = (f"{a} looked {'expensive' if zval > 0 else 'cheap'} relative to {b} "
+                   f"({abs(zval):.2f} typical swings {'above' if zval > 0 else 'below'} normal). Research idea: {verb}, "
+                   f"expecting the gap to narrow. Potential ≈ ₹{edge:,.0f} vs estimated costs ₹{rt_cost:,.0f}.")
     else:
         summary = "No signal — failed: " + ", ".join(failed)
     return {

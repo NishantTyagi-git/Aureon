@@ -91,19 +91,19 @@ def verdict(m: dict) -> dict:
     t = m.get("trade_t_stat")
     gross = m.get("gross_pnl", 0.0)
     if n == 0:
-        return {"label": "insufficient_evidence", "text": "No trades were generated — no evidence either way."}
+        return {"label": "insufficient_evidence", "text": "The strategy never traded in this period, so there is no evidence either way. Try a more relaxed setting or a different pair."}
     if n < 20:
         return {"label": "insufficient_evidence",
-                "text": f"Only {n} trades: too few to distinguish skill from noise. Net P&L ₹{net:,.0f}."}
+                "text": f"Only {n} trades — too few to tell a real pattern from luck. Net result ₹{net:,.0f}; at least 20 trades are needed before drawing conclusions."}
     if net <= 0 and gross > 0:
         return {"label": "unprofitable_after_costs",
-                "text": f"Gross P&L ₹{gross:,.0f} is consumed by costs; net ₹{net:,.0f}. No exploitable edge after costs."}
+                "text": f"Before costs the strategy made ₹{gross:,.0f}, but trading costs turned that into ₹{net:,.0f}. There is no profit left after costs."}
     if net <= 0:
-        return {"label": "unprofitable", "text": f"Net P&L ₹{net:,.0f} over {n} trades — no edge found."}
+        return {"label": "unprofitable", "text": f"The strategy lost ₹{-net:,.0f} over {n} trades. No profitable pattern was found."}
     if t is None or t < 2.0:
         return {"label": "not_significant",
-                "text": f"Net P&L ₹{net:,.0f} over {n} trades, but the mean trade is not statistically "
-                        f"significant (t = {t if t is None else round(t, 2)}). Treat as unproven."}
+                "text": f"The strategy made ₹{net:,.0f} over {n} trades, but results vary so much from trade to trade that "
+                        f"luck can't be ruled out (confidence t = {t if t is None else round(t, 2)}, needs about 2). Treat as unproven."}
     return {"label": "positive_but_verify",
-            "text": f"Net P&L ₹{net:,.0f} over {n} trades with t = {t:.2f}. Positive in this sample; confirm "
-                    f"out-of-sample, with capacity and cost stress, before drawing conclusions."}
+            "text": f"The strategy made ₹{net:,.0f} over {n} trades with reasonable statistical confidence (t = {t:.2f}). "
+                    f"Promising in this period — confirm on unseen data and with higher costs before relying on it."}

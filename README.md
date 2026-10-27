@@ -88,9 +88,23 @@ DM Sans body, JetBrains Mono numerics, 4 px grid, 6/8/12 px radii, indigo reserv
 elements, flat 1 px-bordered surfaces that lift only on hover. Light theme toggle in the nav;
 ⌘K / Ctrl+K opens quick navigation.
 
-Views: Overview · Contracts · Relative value · Term structure · Signals · Backtest ·
-Performance & risk · Quality & lifecycle · Data. The pair, lookback, thresholds and costs chosen in
-one view carry over to the others.
+Navigation follows the research workflow:
+
+| Section | What it's for |
+|---|---|
+| Home | What Aureon does, a plain-English summary of today, and a getting-started checklist |
+| Market data → Contracts / Price curves | Explore individual contracts, expiries and carry |
+| Compare | Compare two contracts: price difference, how unusual it is, typical reversion time |
+| Opportunities | Days when a difference was unusual *and* practical to act on, with reasons |
+| Test strategy | Realistic (walk-forward) or quick test on past data, with costs |
+| Results | Verdict, profit after costs, risk, and where the profit came from |
+| Data → Data health / Data sources | Coverage and validation checks; loading data |
+
+Compare → Opportunities → Test strategy → Results share one selected pair and settings, shown in
+a step bar at the top of each page. Every page has a collapsible "How to read this page" guide,
+technical terms carry ⓘ explanations, and the "?" button opens a searchable glossary. Advanced
+settings are folded away; beginners can pick a Strict / Balanced / Relaxed sensitivity instead of
+raw thresholds. Old links (`#/relative`, `#/term`, `#/backtest`, …) redirect to the new pages.
 
 ## Honesty rules built in
 

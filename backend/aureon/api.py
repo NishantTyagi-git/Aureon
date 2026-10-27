@@ -65,6 +65,14 @@ def create_app(service: Service | None = None) -> FastAPI:
     app = FastAPI(title="Aureon", version="1.0.0")
     app.state.service = svc
 
+    @app.middleware("http")
+    async def _revalidate_static(request, call_next):
+        # Make browsers re-check UI files so an updated frontend is picked up without a hard refresh.
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.exception_handler(Exception)
     async def _err(_, exc: Exception):  # pragma: no cover - last-resort handler
         log.exception("unhandled error")

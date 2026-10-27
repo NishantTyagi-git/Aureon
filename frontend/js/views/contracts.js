@@ -1,13 +1,19 @@
 import { api } from "../api.js";
 import { lineChart, legend } from "../charts.js";
-import { bindTable, noDataState, stat, table, track } from "../components.js";
+import { bindTable, noDataState, pageHead, panelHead, stat, table, track } from "../components.js";
+import { info, pageGuide } from "../help.js";
 import { date, esc, expiry, int, num, pct, SYMBOL_COLORS, ts } from "../format.js";
 
 const SYMS = ["ALL", "GOLDM", "GOLDTEN", "GOLDGUINEA", "GOLDPETAL", "GOLD"];
 
 export default async function contracts(root, params) {
-  root.innerHTML = `<div class="page-head"><div><span class="overline">Contract explorer</span><h1>Individual contracts</h1>
-    <p>Every (symbol, expiry) is tracked as its own instrument — different expiries are never merged into a continuous series. Eligibility requires an active, traded contract with enough days to expiry.</p></div></div>
+  root.innerHTML = `${pageHead("Market data", "Explore individual contracts",
+      "Each gold product trades several contracts that expire in different months. Here every contract is listed separately with its prices, trading activity and how much data Aureon has for it.")}
+    ${pageGuide("contracts", {
+      what: "A list of contracts. <b>Tradable</b> ones are active, traded on the latest day, and not too close to expiry. Click any row to see its full price history.",
+      why: "Comparisons and tests only use contracts that were genuinely tradable on each day — a contract nobody trades, or one about to expire, gives misleading prices.",
+      next: "Look at <a href='#/market/curves'>Price curves</a> to see all expiries of a product side by side, or go to <a href='#/compare'>Compare</a>.",
+    })}
     <div id="body"></div>`;
   const res = await api.contracts();
   const body = root.querySelector("#body");
@@ -15,14 +21,14 @@ export default async function contracts(root, params) {
   let sym = params[0] || "ALL", statusF = "active";
   body.innerHTML = `
     <div class="row between" style="margin-bottom:16px">
-      <div class="row" id="sym-chips">${SYMS.map((s) => `<span class="chip btn-chip ${s === sym ? "on" : ""}" data-s="${s}">${s === "ALL" ? "All symbols" : s}</span>`).join("")}</div>
-      <div class="seg" id="status-seg">${["active", "expired", "all"].map((s) => `<button data-s="${s}" class="${s === statusF ? "on" : ""}">${s[0].toUpperCase() + s.slice(1)}</button>`).join("")}</div>
+      <div class="row" id="sym-chips">${SYMS.map((s) => `<button type="button" class="chip btn-chip ${s === sym ? "on" : ""}" data-s="${s}">${s === "ALL" ? "All products" : s}</button>`).join("")}</div>
+      <div class="seg" id="status-seg">${[["active", "Trading now"], ["expired", "Expired"], ["all", "All"]].map(([s, l]) => `<button data-s="${s}" class="${s === statusF ? "on" : ""}">${l}</button>`).join("")}</div>
     </div>
     <div class="grid g-side">
       <div class="panel flush" id="tbl"></div>
-      <div class="stack" id="detail"><div class="panel"><div class="caption">Select a contract to inspect its full history.</div></div></div>
+      <div class="stack" id="detail"><div class="empty" style="padding:32px 24px"><h3>Pick a contract</h3><p>Click any row on the left to see its price history, trading activity and the raw data behind it.</p></div></div>
     </div>
-    <div class="panel section"><div class="panel-head"><div><h3>Front-contract transitions</h3><div class="caption">Days on which the nearest eligible contract (≥5 days to expiry, traded) switched — every switch is explicit</div></div></div><div id="trans"></div></div>`;
+    <div class="panel section">${panelHead("Contract switches", "Days when Aureon moved from an expiring contract to the next one for each product. Prices are never silently joined across contracts.", "", "roll")}<div id="trans"></div></div>`;
   // make the table column wider than the side-panel default
   body.querySelector(".g-side").style.gridTemplateColumns = "minmax(0, 1.25fr) minmax(0, 1fr)";
 
@@ -32,13 +38,13 @@ export default async function contracts(root, params) {
     const t = body.querySelector("#tbl");
     t.innerHTML = table([
       { label: "Contract", render: (r) => `<span class="swatch" style="background:${SYMBOL_COLORS[r.symbol]}"></span> <span class="mono">${r.symbol} ${expiry(r.expiry)}</span>` },
-      { label: "Status", render: (r) => r.status === "active" ? (r.eligible ? `<span class="chip ok">eligible</span>` : `<span class="chip warn" title="${esc(r.eligibility_reason)}">${esc(r.eligibility_reason.length > 22 ? "ineligible" : r.eligibility_reason)}</span>`) : `<span class="chip">${r.status.replace(/_/g, " ")}</span>` },
-      { label: "DTE", right: true, render: (r) => (r.dte >= 0 ? r.dte : "—") },
-      { label: "Last", right: true, render: (r) => num(r.last_close, 0) },
-      { label: "Obs", right: true, render: (r) => int(r.observations) },
-      { label: "Coverage", right: true, render: (r) => `<span class="${r.coverage < 0.98 ? "neg" : ""}">${pct(r.coverage, 0)}</span>` },
-      { label: "Traded days", right: true, render: (r) => int(r.traded_days) },
-      { label: "Volume", right: true, render: (r) => int(r.total_volume_lots) },
+      { label: "Status", render: (r) => r.status === "active" ? (r.eligible ? `<span class="chip ok">Tradable</span>` : `<span class="chip warn" title="${esc(r.eligibility_reason)}">Not tradable</span>`) : `<span class="chip">${r.status === "expired" ? "Expired" : "No recent data"}</span>` },
+      { label: "Expires in", right: true, help: "dte", render: (r) => (r.dte >= 0 ? `${r.dte} d` : "—") },
+      { label: "Last price", right: true, render: (r) => num(r.last_close, 0) },
+      { label: "Days of data", right: true, render: (r) => int(r.observations) },
+      { label: "Complete", right: true, render: (r) => `<span class="${r.coverage < 0.98 ? "neg" : ""}" title="Share of trading days with data">${pct(r.coverage, 0)}</span>` },
+      { label: "Days traded", right: true, help: "stale", render: (r) => int(r.traded_days) },
+      { label: "Total volume", right: true, help: "volume", render: (r) => int(r.total_volume_lots) },
     ], rows, { onClick: true, maxHeight: 620 });
     bindTable(t, rows, (r, tr) => { t.querySelectorAll("tr.sel").forEach((x) => x.classList.remove("sel")); tr.classList.add("sel"); showDetail(r); });
   }
@@ -52,11 +58,11 @@ export default async function contracts(root, params) {
     const hist = (await api.contract(c.symbol, c.expiry)).history;
     d.innerHTML = `
       <div class="panel"><div class="panel-head"><div><h3 class="mono">${c.symbol} ${expiry(c.expiry)}</h3><div class="caption">Expires ${date(c.expiry)} · first seen ${date(c.first_seen)} · last ${date(c.last_seen)}</div></div>
-        <span class="chip ${c.eligible ? "ok" : ""}">${esc(c.eligibility_reason)}</span></div>
-        <div class="stat-row">${stat("Last close", num(c.last_close, 0))}${stat("₹/10g fine", num(c.last_norm, 0))}${stat("Missing days", int(c.missing_observations), `${int(c.expected_observations)} expected`)}${stat("Zero-volume days", int(c.observations - c.traded_days))}</div></div>
-      <div class="panel"><div class="panel-head"><div><h3>Price</h3><div class="caption">Solid: traded closes · hollow dots: reference closes on zero-volume days (not tradable)</div></div></div><div id="cp"></div></div>
-      <div class="panel"><div class="panel-head"><div><h3>Volume & open interest</h3></div>${legend([{ name: "Volume (lots)", color: "var(--c-gold)" }, { name: "Open interest", color: SYMBOL_COLORS[c.symbol] }])}</div><div id="cv"></div></div>
-      <details class="panel"><summary>Raw observations (${hist.length})</summary><div style="margin-top:12px">${table([
+        <span class="chip ${c.eligible ? "ok" : ""}">${c.eligible ? "Tradable" : esc(c.eligibility_reason)}</span></div>
+        <div class="stat-row">${stat("Last price", num(c.last_close, 0), "as quoted")}${stat("Comparable price", num(c.last_norm, 0), "₹ per 10 g pure gold", "", "normalized")}${stat("Missing days", int(c.missing_observations), `of ${int(c.expected_observations)} trading days`)}${stat("Days with no trades", int(c.observations - c.traded_days), "reference prices only", "", "stale")}</div></div>
+      <div class="panel">${panelHead("Price", "Line: closing price on days the contract traded. Grey dots: reference prices on days with no trades (not used for analysis). Shaded: the day\'s high–low range.")}<div id="cp"></div></div>
+      <div class="panel">${panelHead("Trading activity", "Bars: lots traded each day. Line: contracts held open.", legend([{ name: "Volume (lots)", color: "var(--c-gold)" }, { name: "Open interest", color: SYMBOL_COLORS[c.symbol] }]), "liquidity")}<div id="cv"></div></div>
+      <details class="panel"><summary class="caption" style="cursor:pointer">Raw daily data (${hist.length} days) — exactly as published by MCX</summary><div style="margin-top:12px">${table([
         { label: "Date", render: (r) => date(r.trade_date) }, { label: "Open", right: true, render: (r) => num(r.open, 0) }, { label: "High", right: true, render: (r) => num(r.high, 0) },
         { label: "Low", right: true, render: (r) => num(r.low, 0) }, { label: "Close", right: true, render: (r) => num(r.close, 0) }, { label: "Vol", right: true, render: (r) => int(r.volume_lots) },
         { label: "OI", right: true, render: (r) => int(r.open_interest) }, { label: "Source", render: (r) => r.raw_id ? `<a href="/api/ingest/raw/${r.raw_id}" target="_blank">${esc(r.source)} #${r.raw_id}</a>` : esc(r.source) },
@@ -77,6 +83,6 @@ export default async function contracts(root, params) {
   body.querySelector("#trans").innerHTML = table([
     { label: "Date", render: (r) => date(r.date) }, { label: "Symbol", render: (r) => `<span class="mono">${r.symbol}</span>` },
     { label: "From", render: (r) => `<span class="mono">${expiry(r.from_expiry)}</span>` }, { label: "To", render: (r) => `<span class="mono">${expiry(r.to_expiry)}</span>` },
-    { label: "Old contract DTE at switch", right: true, render: (r) => r.from_dte_on_switch },
-  ], tr, { maxHeight: 300, emptyText: "No transitions in the loaded history." });
+    { label: "Days left on old contract", right: true, render: (r) => r.from_dte_on_switch },
+  ], tr, { maxHeight: 300, emptyText: "No contract switches in the loaded history." });
 }

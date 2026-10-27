@@ -19,7 +19,7 @@ export function inrCompact(v) {
   if (a >= 1e5) return `${sign}₹${(a / 1e5).toFixed(2)} L`;
   return `${sign}₹${a.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
-export const pct = (v, d = 2) => (isNum(v) ? `${(v * 100).toFixed(d)}%` : dash);
+export const pct = (v, d = 2) => (isNum(v) ? `${v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(d)}%` : dash);
 export const bps = (v, d = 1) => (isNum(v) ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(d)} bps` : dash);
 export const signed = (v, d = 2) => (isNum(v) ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(d)}` : dash);
 export const cls = (v) => (!isNum(v) ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "");
